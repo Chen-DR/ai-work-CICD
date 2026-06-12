@@ -4,6 +4,7 @@ from rest_framework.permissions import IsAuthenticated
 from django.conf import settings
 from django.utils import timezone
 from apps.common.response import success, error
+from apps.audit.services import client_ip, log_action
 from .models import ApptainerDefinition, ApptainerBuildJob
 from .serializers import (
     ApptainerDefinitionSerializer, ApptainerBuildJobSerializer,
@@ -26,7 +27,30 @@ class ApptainerDefinitionViewSet(viewsets.ModelViewSet):
         return qs
 
     def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
+        definition = serializer.save(created_by=self.request.user)
+        ApptainerService().persist_definition_file(definition)
+        log_action(
+            self.request.user,
+            "apptainer.definition.create",
+            "apptainer_definition",
+            definition.id,
+            project_id=definition.project_id,
+            ip_address=client_ip(self.request),
+            detail={"name": definition.name, "storage_path": definition.storage_path},
+        )
+
+    def perform_update(self, serializer):
+        definition = serializer.save()
+        ApptainerService().persist_definition_file(definition)
+        log_action(
+            self.request.user,
+            "apptainer.definition.update",
+            "apptainer_definition",
+            definition.id,
+            project_id=definition.project_id,
+            ip_address=client_ip(self.request),
+            detail={"name": definition.name, "storage_path": definition.storage_path},
+        )
 
 
 class ApptainerBuildJobViewSet(viewsets.ModelViewSet):
@@ -53,6 +77,15 @@ class ApptainerBuildJobViewSet(viewsets.ModelViewSet):
             workdir=ser.validated_data["workdir"],
             output_name=ser.validated_data["output_name"],
             created_by=request.user,
+        )
+        log_action(
+            request.user,
+            "apptainer.build_job.create",
+            "apptainer_build_job",
+            job.id,
+            project_id=job.project_id,
+            ip_address=client_ip(request),
+            detail={"server_id": job.server_id, "workdir": job.workdir, "output_name": job.output_name},
         )
 
         # Submit Celery task
@@ -103,6 +136,15 @@ def generate(request):
     svc = ApptainerService()
     try:
         definition = svc.generate_definition(**ser.validated_data)
+        log_action(
+            request.user,
+            "apptainer.definition.generate",
+            "apptainer_definition",
+            definition.id,
+            project_id=definition.project_id,
+            ip_address=client_ip(request),
+            detail={"name": definition.name, "use_knowledge": ser.validated_data.get("use_knowledge")},
+        )
         return success(ApptainerDefinitionSerializer(definition).data)
     except Exception as e:
         return error(70001, f"Generation failed: {str(e)}", status=500)

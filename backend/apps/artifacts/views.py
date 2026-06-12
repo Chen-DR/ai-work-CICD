@@ -4,6 +4,7 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from django.conf import settings
 from apps.common.response import success, error
+from apps.audit.services import client_ip, log_action
 from .models import Artifact
 from .serializers import ArtifactSerializer
 from .services import ArtifactService
@@ -34,9 +35,27 @@ class ArtifactViewSet(viewsets.ReadOnlyModelViewSet):
         response = self.service.get_download_response(artifact)
         if response is None:
             return error(40401, "File not found on disk", status=404)
+        log_action(
+            request.user,
+            "artifact.download",
+            "artifact",
+            artifact.id,
+            project_id=artifact.project_id,
+            ip_address=client_ip(request),
+            detail={"file_name": artifact.file_name, "artifact_type": artifact.artifact_type},
+        )
         return response
 
     def destroy(self, request, *args, **kwargs):
         artifact = self.get_object()
+        log_action(
+            request.user,
+            "artifact.delete",
+            "artifact",
+            artifact.id,
+            project_id=artifact.project_id,
+            ip_address=client_ip(request),
+            detail={"file_name": artifact.file_name, "artifact_type": artifact.artifact_type},
+        )
         self.service.delete_artifact_file(artifact)
         return super().destroy(request, *args, **kwargs)

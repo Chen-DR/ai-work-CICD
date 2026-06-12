@@ -3,12 +3,12 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from django.utils import timezone
 from apps.common.response import success, error
+from apps.audit.services import client_ip, log_action
 from .models import Server, ServerMetric
 from .serializers import ServerSerializer, ServerCreateSerializer, ServerAllowedDirSerializer, ServerMetricSerializer
 from .services import save_server_credentials, get_server_credentials
 from .metrics import collect_server_metrics
 from infrastructure.ssh.executor import SSHExecutor
-from infrastructure.security.encryptor import decrypt
 
 
 class ServerViewSet(viewsets.ModelViewSet):
@@ -42,6 +42,15 @@ class ServerViewSet(viewsets.ModelViewSet):
             password=ser.validated_data.get("password", ""),
             ssh_key=ser.validated_data.get("ssh_key", ""),
         )
+        log_action(
+            request.user,
+            "server.create",
+            "server",
+            server.id,
+            project_id=server.project_id,
+            ip_address=client_ip(request),
+            detail=ser.validated_data,
+        )
 
         from rest_framework.response import Response
         return Response({"code": 0, "message": "success", "data": ServerSerializer(server).data}, status=201)
@@ -65,6 +74,15 @@ class ServerViewSet(viewsets.ModelViewSet):
         else:
             server.status = "FAILED"
         server.save(update_fields=["status"])
+        log_action(
+            request.user,
+            "server.test",
+            "server",
+            server.id,
+            project_id=server.project_id,
+            ip_address=client_ip(request),
+            detail={"success": ok, "message": msg},
+        )
 
         return success({"success": ok, "message": msg})
 
@@ -95,6 +113,15 @@ class ServerViewSet(viewsets.ModelViewSet):
                 code, out, err = executor.run_command(cmd, timeout=10)
                 results[key] = out.strip() if code == 0 else err.strip() if err else "detection failed"
 
+            log_action(
+                request.user,
+                "server.detect",
+                "server",
+                server.id,
+                project_id=server.project_id,
+                ip_address=client_ip(request),
+                detail={"result_keys": list(results.keys())},
+            )
             return success({
                 "hostname": results.get("hostname", ""),
                 "os": results.get("os", ""),
@@ -119,6 +146,15 @@ class ServerViewSet(viewsets.ModelViewSet):
             return error(40001, "path is required")
 
         allowed_dir = server.allowed_dirs.create(path=path, purpose=purpose)
+        log_action(
+            request.user,
+            "server.allowed_dir.create",
+            "server_allowed_dir",
+            allowed_dir.id,
+            project_id=server.project_id,
+            ip_address=client_ip(request),
+            detail={"server_id": server.id, "path": path, "purpose": purpose},
+        )
         return success(ServerAllowedDirSerializer(allowed_dir).data, status=201)
 
     @action(detail=True, methods=["post"])

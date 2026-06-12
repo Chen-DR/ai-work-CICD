@@ -1,8 +1,8 @@
-"""Custom authentication that supports both Bearer and Token prefixes."""
+"""Custom authentication for Authorization: Bearer <token>."""
 
 from rest_framework.authentication import TokenAuthentication
 
 
 class BearerTokenAuthentication(TokenAuthentication):
-    """Accepts both 'Authorization: Bearer <token>' and 'Authorization: Token <token>'."""
+    """Accepts 'Authorization: Bearer <token>'."""
     keyword = "Bearer"

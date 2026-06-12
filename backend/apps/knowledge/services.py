@@ -33,12 +33,13 @@ class KnowledgeService:
             created_by_id=user_id,
         )
 
-        # Parse inline (for MVP; async path uses Celery task)
-        self._parse_document(doc, content.decode("utf-8", errors="ignore"))
-
         return doc
 
     def _parse_document(self, doc: KnowledgeDocument, text: str):
+        doc.status = "PARSING"
+        doc.error_message = ""
+        doc.save(update_fields=["status", "error_message"])
+        KnowledgeChunk.objects.filter(document=doc).delete()
         chunks = parse_document(text)
         for i, chunk_content in enumerate(chunks):
             KnowledgeChunk.objects.create(

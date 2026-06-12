@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from .models import BenchmarkScript, BenchmarkJob
+from .validators import validate_benchmark_params
 
 
 class BenchmarkScriptSerializer(serializers.ModelSerializer):
@@ -26,3 +27,9 @@ class CreateBenchmarkJobSerializer(serializers.Serializer):
     server_id = serializers.IntegerField()
     workdir = serializers.CharField(max_length=512)
     params = serializers.JSONField()
+
+    def validate_params(self, value):
+        errors = validate_benchmark_params(value or {})
+        if errors:
+            raise serializers.ValidationError(errors)
+        return value or {}

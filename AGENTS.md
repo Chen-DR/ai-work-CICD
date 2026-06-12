@@ -9,11 +9,11 @@
 ```text
 前端：Vue 3 + TypeScript + Vite + Element Plus + Pinia + Axios
 后端：Python 3.11+ + Django + Django REST Framework
-数据库：SQLite，用于 MVP 阶段
+数据库：MySQL 8，用于业务元数据
 异步任务：Celery + Redis
 远程执行：Paramiko SSH/SFTP
 AI 模型：DeepSeek API
-知识库：SQLite 元数据 + 关键词检索起步
+知识库：MySQL 元数据 + 关键词检索起步
 文件存储：MVP 阶段使用本地文件系统
 部署：优先 Docker Compose，后续按需升级 Kubernetes
 ```
@@ -91,8 +91,8 @@ MVP 阶段可使用关键词检索。后续可升级为 SQLite FTS5、Chroma、F
 4. DeepSeek 输出绝不能被直接执行。
 5. Celery 负责长耗时任务。
 6. Paramiko 负责受控 SSH/SFTP 执行。
-7. SQLite 只保存元数据。
-8. 大文件、日志、上传脚本、报告和生成的 definition 文件必须保存在文件系统中。
+7. MySQL 保存业务元数据。
+8. 大文件、日志、上传脚本、报告和生成的 definition 文件必须保存在文件系统中.
 9. 前端绝不能提交任意 shell 命令。
 10. 远程命令必须由后端 action 模板生成。
 11. 每个远程操作都必须经过命令策略校验。
@@ -425,9 +425,9 @@ Settings
 
 ## 数据库规则
 
-MVP 使用 SQLite。
+MVP 使用 MySQL 8 保存业务元数据。
 
-SQLite 应保存：
+MySQL 应保存：
 
 ```text
 用户和角色
@@ -447,7 +447,7 @@ Apptainer 构建任务元数据
 审计日志
 ```
 
-SQLite 不应保存：
+MySQL 不应保存：
 
 ```text
 大文件

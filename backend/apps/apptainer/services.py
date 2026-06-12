@@ -1,13 +1,32 @@
 from django.conf import settings
 from infrastructure.llm.deepseek_client import DeepSeekClient
+from infrastructure.storage.local_storage import LocalStorage
 from apps.chat.prompts import APPTAINER_GENERATE_PROMPT
 from apps.chat.models import Message
+from apps.common.storage import generate_storage_path
 from .models import ApptainerDefinition
+from .validators import validate_definition_content
 
 
 class ApptainerService:
     def __init__(self):
         self.llm = DeepSeekClient()
+        self.storage = LocalStorage()
+
+    def persist_definition_file(self, definition: ApptainerDefinition) -> ApptainerDefinition:
+        filename = f"{definition.name or 'definition'}.def"
+        relative_path, _ = generate_storage_path("apptainer/definitions", filename)
+        self.storage.write(relative_path, definition.content.encode("utf-8"))
+        definition.storage_path = relative_path
+        definition.save(update_fields=["storage_path", "updated_at"])
+        return definition
+
+    def create_definition(self, **kwargs) -> ApptainerDefinition:
+        errors = validate_definition_content(kwargs.get("content", ""))
+        if errors:
+            raise ValueError("; ".join(errors))
+        definition = ApptainerDefinition.objects.create(**kwargs)
+        return self.persist_definition_file(definition)
 
     def generate_definition(
         self,
@@ -63,7 +82,7 @@ class ApptainerService:
         name = name.replace("\n", " ").strip()
 
         # Save definition
-        definition = ApptainerDefinition.objects.create(
+        definition = self.create_definition(
             project_id=project_id,
             conversation_id=conversation_id,
             name=name[:80],

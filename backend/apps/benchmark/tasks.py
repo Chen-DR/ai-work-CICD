@@ -1,5 +1,4 @@
 import os
-import json
 import logging
 from celery import shared_task
 from django.utils import timezone
@@ -14,7 +13,10 @@ def run_benchmark_job_task(self, job_id):
     from apps.servers.services import get_server_credentials
     from infrastructure.ssh.executor import SSHExecutor
     from infrastructure.ssh.sftp import SFTPClient
+    from infrastructure.ssh.guards import validate_safe_command, validate_server_remote_path, validate_server_workdir
     from infrastructure.security.encryptor import decrypt
+    from apps.artifacts.utils import create_artifact
+    from .validators import validate_benchmark_params
 
     job = BenchmarkJob.objects.select_related("script", "server").get(id=job_id)
     job.status = "VALIDATING"
@@ -30,6 +32,14 @@ def run_benchmark_job_task(self, job_id):
             f.write(line)
 
     try:
+        param_errors = validate_benchmark_params(job.params or {})
+        if param_errors:
+            raise ValueError("; ".join(param_errors))
+        job.workdir = validate_server_workdir(job.server, job.workdir)
+        local_script = os.path.join(settings.DATA_ROOT, job.script.storage_path)
+        if not os.path.isfile(local_script):
+            raise FileNotFoundError(f"Benchmark script not found: {job.script.storage_path}")
+
         creds = get_server_credentials(job.server)
         password = decrypt(creds["password"]) if creds.get("password") else ""
         pkey = decrypt(creds.get("ssh_key", "")) if creds.get("ssh_key") else ""
@@ -42,11 +52,13 @@ def run_benchmark_job_task(self, job_id):
         job.save(update_fields=["status"])
 
         sftp = SFTPClient(host, port, username, password, pkey)
-        sftp.mkdir(job.workdir)
+        if not sftp.mkdir(job.workdir):
+            raise RuntimeError(f"Failed to create remote workdir: {job.workdir}")
 
-        local_script = os.path.join(settings.DATA_ROOT, job.script.storage_path)
-        remote_script = os.path.join(job.workdir, job.script.file_name)
-        sftp.upload_file(local_script, remote_script)
+        remote_script_name = f"benchmark_script_{job.script_id}.sh"
+        remote_script = validate_server_remote_path(job.server, os.path.join(job.workdir, remote_script_name))
+        if not sftp.upload_file(local_script, remote_script):
+            raise RuntimeError(f"Failed to upload benchmark script to: {remote_script}")
 
         # Execute
         job.status = "RUNNING"
@@ -59,10 +71,11 @@ def run_benchmark_job_task(self, job_id):
         threads = params.get("threads", 16)
 
         command = (
-            f"cd {job.workdir} && chmod +x {job.script.file_name} && "
-            f"./{job.script.file_name} --duration {duration} --threads {threads} "
+            f"cd {job.workdir} && chmod +x {remote_script_name} && "
+            f"./{remote_script_name} --duration {duration} --threads {threads} "
             f"--report-file {report_file}"
         )
+        validate_safe_command(command)
         log_line(f"Running: {command}\n")
 
         executor = SSHExecutor(host, port, username, password, pkey)
@@ -77,22 +90,43 @@ def run_benchmark_job_task(self, job_id):
         job.status = "COLLECTING"
         job.save(update_fields=["status"])
 
-        remote_report = os.path.join(job.workdir, report_file)
+        remote_report = validate_server_remote_path(job.server, os.path.join(job.workdir, report_file))
         if sftp.file_exists(remote_report):
             local_report_dir = os.path.join(
                 settings.DATA_ROOT, "artifacts", "benchmark", "reports", f"job_{job_id}"
             )
             os.makedirs(local_report_dir, exist_ok=True)
             local_report_path = os.path.join(local_report_dir, report_file)
-            sftp.download_file(remote_report, local_report_path)
+            if not sftp.download_file(remote_report, local_report_path):
+                raise RuntimeError(f"Failed to download benchmark report from: {remote_report}")
             job.report_path = os.path.join(
                 "artifacts", "benchmark", "reports", f"job_{job_id}", report_file
             )
             job.remote_report_path = remote_report
+        else:
+            raise FileNotFoundError(f"Expected benchmark report not found: {remote_report}")
 
         job.status = "SUCCESS"
         job.finished_at = timezone.now()
         job.save(update_fields=["status", "report_path", "remote_report_path", "finished_at"])
+        create_artifact(
+            project_id=job.project_id,
+            job_type="benchmark",
+            job_id=job.id,
+            artifact_type="benchmark_log",
+            file_name=os.path.basename(log_path),
+            storage_path=log_path,
+            local_file=True,
+        )
+        create_artifact(
+            project_id=job.project_id,
+            job_type="benchmark",
+            job_id=job.id,
+            artifact_type="benchmark_report",
+            file_name=report_file,
+            storage_path=job.report_path,
+            local_file=True,
+        )
         log_line("Benchmark completed successfully.\n")
 
     except Exception as e:

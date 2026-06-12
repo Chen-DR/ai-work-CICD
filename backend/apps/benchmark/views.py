@@ -6,6 +6,7 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from django.conf import settings
 from django.utils import timezone
 from apps.common.response import success, error
+from apps.audit.services import client_ip, log_action
 from .models import BenchmarkScript, BenchmarkJob
 from .serializers import BenchmarkScriptSerializer, BenchmarkJobSerializer, CreateBenchmarkJobSerializer
 from .services import BenchmarkService
@@ -45,6 +46,15 @@ class BenchmarkScriptViewSet(viewsets.ModelViewSet):
             description=request.data.get("description", ""),
             user=request.user,
         )
+        log_action(
+            request.user,
+            "benchmark.script.upload",
+            "benchmark_script",
+            script.id,
+            project_id=script.project_id,
+            ip_address=client_ip(request),
+            detail={"file_name": script.file_name, "script_type": script.script_type},
+        )
         return success(BenchmarkScriptSerializer(script).data, status=201)
 
 
@@ -73,6 +83,15 @@ class BenchmarkJobViewSet(viewsets.ModelViewSet):
             workdir=ser.validated_data["workdir"],
             params=ser.validated_data["params"],
             user=request.user,
+        )
+        log_action(
+            request.user,
+            "benchmark.job.create",
+            "benchmark_job",
+            job.id,
+            project_id=job.project_id,
+            ip_address=client_ip(request),
+            detail={"server_id": job.server_id, "workdir": job.workdir, "params": job.params},
         )
         return success(BenchmarkJobSerializer(job).data, status=201)
 

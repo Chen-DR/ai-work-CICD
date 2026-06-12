@@ -19,7 +19,7 @@
 | Python | ≥ 3.11 |
 | Node.js | ≥ 18 |
 | Redis | ≥ 7（Celery 依赖） |
-| SQLite | 内置（MVP） |
+| MySQL | ≥ 8.0（业务元数据） |
 
 ---
 
@@ -51,6 +51,11 @@ cp .env.example .env
 DJANGO_SECRET_KEY=your-random-secret-key-here
 DEEPSEEK_API_KEY=sk-your-deepseek-api-key
 ENCRYPTION_KEY=your-fernet-key-for-credentials
+DB_NAME=aiops
+DB_USER=aiops
+DB_PASSWORD=your-db-password
+DB_HOST=127.0.0.1
+DB_PORT=3306
 ```
 
 > `ENCRYPTION_KEY` 生成方式：
@@ -277,7 +282,8 @@ Nginx :80
   ├── / → frontend (:5173)
   └── /api/ + /admin/ → backend (:8000)
 
-Backend → Redis (:6379) → Celery Worker
+Backend → MySQL (:3306)
+        → Redis (:6379) → Celery Worker
                                 └── SSH/SFTP → Remote Servers
 ```
 
@@ -309,6 +315,13 @@ cd frontend && npm run dev
 | `DJANGO_DEBUG` | | `false` | 调试模式，开发时设为 `true` |
 | `DJANGO_ALLOWED_HOSTS` | | `*` | 逗号分隔的允许域名 |
 | `DATA_ROOT` | | `./data` | 文件存储根目录 |
+| `DB_NAME` | ✅ | `aiops` | MySQL 数据库名 |
+| `DB_USER` | ✅ | `aiops` | MySQL 用户名 |
+| `DB_PASSWORD` | ✅ | - | MySQL 用户密码 |
+| `DB_HOST` | ✅ | `127.0.0.1` | MySQL 主机，Docker 中为 `mysql` |
+| `DB_PORT` | | `3306` | MySQL 端口 |
+| `DB_CONN_MAX_AGE` | | `60` | 数据库连接复用秒数 |
+| `DB_CONNECT_TIMEOUT` | | `10` | 数据库连接超时秒数 |
 | `REDIS_URL` | ✅ | `redis://127.0.0.1:6379/0` | Redis 连接地址 |
 | `DEEPSEEK_API_KEY` | ✅ | - | DeepSeek API 密钥 |
 | `DEEPSEEK_BASE_URL` | | `https://api.deepseek.com` | API 端点 |

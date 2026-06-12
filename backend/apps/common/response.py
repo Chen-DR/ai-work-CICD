@@ -1,8 +1,8 @@
 from rest_framework.response import Response
 
 
-def success(data=None, message="success"):
-    return Response({"code": 0, "message": message, "data": data})
+def success(data=None, message="success", status=200):
+    return Response({"code": 0, "message": message, "data": data}, status=status)
 
 
 def error(code: int, message: str, data=None, status=400):

@@ -1,11 +1,13 @@
 from rest_framework import viewsets, status
-from rest_framework.decorators import action, api_view
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser
 from apps.common.response import success, error
+from apps.audit.services import client_ip, log_action
 from .models import KnowledgeDocument
 from .serializers import KnowledgeDocumentSerializer, KnowledgeChunkSerializer, KnowledgeSearchSerializer
 from .services import KnowledgeService
+from .tasks import parse_knowledge_document_task
 
 
 class KnowledgeDocumentViewSet(viewsets.ModelViewSet):
@@ -39,21 +41,39 @@ class KnowledgeDocumentViewSet(viewsets.ModelViewSet):
             user_id=request.user.id,
             file=file,
         )
+        parse_knowledge_document_task.delay(doc.id)
+        log_action(
+            request.user,
+            "knowledge.upload",
+            "knowledge_document",
+            doc.id,
+            project_id=doc.project_id,
+            ip_address=client_ip(request),
+            detail={"file_name": doc.file_name, "status": doc.status},
+        )
         return success(KnowledgeDocumentSerializer(doc).data, status=201)
 
     @action(detail=True, methods=["post"])
     def parse(self, request, pk=None):
         doc = self.get_object()
-        svc = KnowledgeService()
         try:
-            content = svc.storage.read(doc.storage_path).decode("utf-8", errors="ignore")
-            svc._parse_document(doc, content)
+            parse_knowledge_document_task.delay(doc.id)
+            log_action(
+                request.user,
+                "knowledge.parse",
+                "knowledge_document",
+                doc.id,
+                project_id=doc.project_id,
+                ip_address=client_ip(request),
+                detail={"file_name": doc.file_name},
+            )
             return success({"status": "parsing"})
         except Exception as e:
             return error(50001, f"Parse failed: {str(e)}", status=500)
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def search(request):
     ser = KnowledgeSearchSerializer(data=request.data)
     if not ser.is_valid():
