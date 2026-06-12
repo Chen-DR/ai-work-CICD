@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+
+# Django / local data
+backend/data/
+backend/staticfiles/
+*.sqlite3
+
+# Node / frontend
+node_modules/
+dist/
+frontend/dist/
+frontend/.vite/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+
+# Logs and temporary files
+*.log
+logs/
+tmp/
+*.tmp
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
