@@ -1,0 +1,9 @@
+from rest_framework.response import Response
+
+
+def success(data=None, message="success"):
+    return Response({"code": 0, "message": message, "data": data})
+
+
+def error(code: int, message: str, data=None, status=400):
+    return Response({"code": code, "message": message, "data": data}, status=status)
