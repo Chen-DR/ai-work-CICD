@@ -7,3 +7,5 @@
 - 初始化本地 Git 仓库。
 - 新增 `.gitignore`，避免提交本地数据、密钥、依赖目录、构建产物和日志文件。
 - 建立变更记录文件，后续修改需要在本文件补充说明。
+- 配置 GitHub 远程仓库 `https://github.com/Chen-DR/ai-work-CICD.git`。
+- 合并远程仓库已有的 `LICENSE` 初始提交。
