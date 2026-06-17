@@ -1,5 +1,5 @@
 import request from './request'
-import type { Server, ServerCreateRequest, ServerTestResult, ServerDetectResult } from '@/types/server'
+import type { Server, ServerCreateRequest, ServerTestResult, ServerDetectResult, ServerAllowedDir } from '@/types/server'
 
 export function getServers(projectId?: number) {
   const params = projectId ? { project_id: projectId } : {}
@@ -15,7 +15,7 @@ export function createServer(data: ServerCreateRequest) {
 }
 
 export function updateServer(id: number, data: Partial<Server>) {
-  return request.put<Server>(`/servers/${id}/`, data)
+  return request.patch<Server>(`/servers/${id}/`, data)
 }
 
 export function deleteServer(id: number) {
@@ -28,4 +28,16 @@ export function testServerConnection(id: number) {
 
 export function detectServerEnvironment(id: number) {
   return request.post<ServerDetectResult>(`/servers/${id}/detect/`)
+}
+
+export function getServerAllowedDirs(id: number) {
+  return request.get<ServerAllowedDir[]>(`/servers/${id}/allowed_dirs/`)
+}
+
+export function createServerAllowedDir(id: number, data: { path: string; purpose: string }) {
+  return request.post<ServerAllowedDir>(`/servers/${id}/allowed_dirs/`, data)
+}
+
+export function deleteServerAllowedDir(serverId: number, dirId: number) {
+  return request.delete(`/servers/${serverId}/allowed_dirs/${dirId}/`)
 }

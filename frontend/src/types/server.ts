@@ -10,6 +10,17 @@ export interface Server {
   username: string
   auth_type: AuthType
   status: ServerStatus
+  allow_script_root: boolean
+  metrics?: {
+    cpu_percent: number
+    mem_percent: number
+    mem_used_gb: number
+    gpu_percent: number
+    gpu_mem_percent: number
+    disk_percent: number
+    disk_used_gb: number
+    collected_at: string
+  } | null
   created_at: string
   updated_at: string
 }

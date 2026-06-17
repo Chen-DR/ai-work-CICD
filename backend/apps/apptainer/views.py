@@ -3,6 +3,7 @@ from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from django.conf import settings
 from django.utils import timezone
+from apps.common.constants import ACTIVE_STATUSES
 from apps.common.response import success, error
 from apps.audit.services import client_ip, log_action
 from .models import ApptainerDefinition, ApptainerBuildJob
@@ -25,6 +26,22 @@ class ApptainerDefinitionViewSet(viewsets.ModelViewSet):
         if project_id:
             qs = qs.filter(project_id=project_id)
         return qs
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        if not serializer.is_valid():
+            return error(40001, "请求参数不正确", serializer.errors, status=400)
+        self.perform_create(serializer)
+        return success(serializer.data, status=status.HTTP_201_CREATED)
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop("partial", False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        if not serializer.is_valid():
+            return error(40001, "请求参数不正确", serializer.errors, status=400)
+        self.perform_update(serializer)
+        return success(serializer.data)
 
     def perform_create(self, serializer):
         definition = serializer.save(created_by=self.request.user)
@@ -95,6 +112,28 @@ class ApptainerBuildJobViewSet(viewsets.ModelViewSet):
 
         return success(ApptainerBuildJobSerializer(job).data, status=201)
 
+    def destroy(self, request, *args, **kwargs):
+        job = self.get_object()
+        if job.status in ACTIVE_STATUSES:
+            return error(40001, "运行中的构建任务不能删除，请先取消任务", status=400)
+
+        log_action(
+            request.user,
+            "apptainer.build_job.delete",
+            "apptainer_build_job",
+            job.id,
+            project_id=job.project_id,
+            ip_address=client_ip(request),
+            detail={
+                "status": job.status,
+                "server_id": job.server_id,
+                "workdir": job.workdir,
+                "output_name": job.output_name,
+            },
+        )
+        self.perform_destroy(job)
+        return success(None)
+
     @action(detail=True, methods=["get"])
     def logs(self, request, pk=None):
         job = self.get_object()
@@ -135,7 +174,7 @@ def generate(request):
 
     svc = ApptainerService()
     try:
-        definition = svc.generate_definition(**ser.validated_data)
+        definition = svc.generate_definition(**ser.validated_data, created_by=request.user)
         log_action(
             request.user,
             "apptainer.definition.generate",
@@ -146,5 +185,7 @@ def generate(request):
             detail={"name": definition.name, "use_knowledge": ser.validated_data.get("use_knowledge")},
         )
         return success(ApptainerDefinitionSerializer(definition).data)
+    except ValueError as e:
+        return error(40001, f"生成内容未通过 Definition 校验：{str(e)}", status=400)
     except Exception as e:
-        return error(70001, f"Generation failed: {str(e)}", status=500)
+        return error(70001, f"Definition 生成失败：{str(e)}", status=500)

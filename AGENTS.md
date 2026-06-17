@@ -302,7 +302,7 @@ Definition 校验
 ```text
 服务器元数据
 SSH 凭据元数据
-加密后的密钥或密码
+明文密钥或密码
 允许远程目录
 SSH 连接测试
 服务器环境检测
@@ -366,7 +366,6 @@ infrastructure/
     keyword_search.py
     retriever.py
   security/
-    encryptor.py
     command_sanitizer.py
     secret_masker.py
 ```
@@ -378,7 +377,6 @@ infrastructure/
 - SFTP 上传和下载必须通过 `infrastructure/ssh/sftp.py`。
 - 命令校验必须通过 `infrastructure/ssh/policy.py`。
 - 文件系统操作必须通过 `infrastructure/storage/local_storage.py`。
-- 密钥加密必须通过 `infrastructure/security/encryptor.py`。
 
 ---
 
@@ -437,7 +435,7 @@ LLM 调用元数据
 知识库文档元数据
 知识库切片
 服务器元数据
-加密后的服务器凭据记录
+明文服务器凭据记录
 服务器允许目录
 Apptainer definition 元数据
 Apptainer 构建任务元数据
@@ -880,9 +878,8 @@ TIMEOUT
 - 不要硬编码 DeepSeek API Key。
 - 不要硬编码服务器密码。
 - 不要打印密码或私钥。
-- 不要将加密后的密钥返回给前端。
-- 服务器凭据必须加密保存。
-- 加密密钥保存在环境变量中。
+- 不要将服务器密码或私钥返回给前端。
+- 服务器凭据按项目负责人要求以明文保存到数据库，仅后端运行时可读取。
 - 只提交 `.env.example`，不要提交真实 `.env`。
 
 文件上传：
@@ -935,8 +932,6 @@ REDIS_URL=
 DEEPSEEK_API_KEY=
 DEEPSEEK_BASE_URL=
 DEEPSEEK_MODEL=
-
-ENCRYPTION_KEY=
 
 MAX_UPLOAD_SIZE_MB=
 JOB_LOG_TAIL_LINES=
@@ -1025,7 +1020,6 @@ npm run build
 未经明确批准切换后端框架
 直接执行 DeepSeek 输出
 新增任意 shell 命令 API
-明文保存服务器密码
 在代码中保存 API Key
 将报告存入 SQLite
 将长日志存入 SQLite

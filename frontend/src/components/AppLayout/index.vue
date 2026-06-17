@@ -17,11 +17,11 @@
           router
           class="sidebar-menu"
         >
-          <template v-for="item in menuItems" :key="item.path || item.group">
+          <template v-for="item in menuItems" :key="item.path || item.group || item.divider">
             <div v-if="item.divider && appStore.sidebarMode === 'expanded'" class="menu-divider">
               <span>{{ item.divider }}</span>
             </div>
-            <el-sub-menu v-if="item.children" :index="item.group!">
+            <el-sub-menu v-else-if="item.children" :index="item.group!">
               <template #title>
                 <el-icon><component :is="item.icon" /></el-icon>
                 <span>{{ item.label }}</span>
@@ -30,7 +30,7 @@
                 {{ child.label }}
               </el-menu-item>
             </el-sub-menu>
-            <el-menu-item v-else :index="item.path!">
+            <el-menu-item v-else-if="item.path" :index="item.path">
               <el-icon><component :is="item.icon" /></el-icon>
               <template #title>{{ item.label }}</template>
             </el-menu-item>
@@ -118,7 +118,7 @@ import { useUserStore } from '@/stores/user'
 import { useProjectStore } from '@/stores/project'
 import { logout } from '@/api/auth'
 import {
-  Odometer, Folder, ChatDotSquare, Notebook, Cpu,
+  Odometer, Folder, ChatDotSquare, Notebook, Cpu, Files,
   DataBoard, Monitor, FolderOpened, List, Setting,
   Fold, Expand, UserFilled, SwitchButton, ArrowDown,
 } from '@element-plus/icons-vue'
@@ -155,10 +155,11 @@ const menuItems: MenuItem[] = [
     ],
   },
   { divider: '运维能力', label: '' } as any,
+  { path: '/scripts', label: '脚本管理', icon: Files },
   {
     group: 'benchmark', label: '压测', icon: DataBoard,
     children: [
-      { path: '/benchmark/scripts', label: '脚本管理' },
+      { path: '/benchmark/scripts', label: '压测脚本' },
       { path: '/benchmark/jobs', label: '压测任务' },
     ],
   },

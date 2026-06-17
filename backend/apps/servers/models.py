@@ -19,6 +19,7 @@ class Server(models.Model):
     username = models.CharField(max_length=128)
     auth_type = models.CharField(max_length=32, default=AUTH_PASSWORD)
     status = models.CharField(max_length=32, choices=STATUS_CHOICES, default="UNKNOWN")
+    allow_script_root = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -35,7 +36,7 @@ class ServerCredential(models.Model):
 
     server = models.ForeignKey(Server, on_delete=models.CASCADE, related_name="credentials")
     credential_type = models.CharField(max_length=32)
-    encrypted_secret = models.TextField()
+    secret = models.TextField(blank=True)
     secret_hint = models.CharField(max_length=128, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -51,6 +52,7 @@ class ServerAllowedDir(models.Model):
     PURPOSE_CHOICES = [
         ("build", "Build"),
         ("benchmark", "Benchmark"),
+        ("script", "Script"),
         ("report", "Report"),
         ("general", "General"),
     ]

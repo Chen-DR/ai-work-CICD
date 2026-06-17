@@ -5,11 +5,18 @@ from .models import Conversation, Message, LLMCall
 from .prompts import SYSTEM_PROMPT, RAG_CONTEXT_TEMPLATE
 
 
+class ChatConfigError(Exception):
+    pass
+
+
 class ChatService:
     def __init__(self):
         self.llm = DeepSeekClient()
 
     def complete(self, project_id: int, conversation_id: int, message: str, use_knowledge: bool = True) -> dict:
+        if not getattr(settings, "DEEPSEEK_API_KEY", "").strip():
+            raise ChatConfigError("DEEPSEEK_API_KEY 未配置，请先在 /opt/ai-work-CICD/.env 中填写 DeepSeek API Key")
+
         conversation = Conversation.objects.get(id=conversation_id, project_id=project_id)
 
         # Save user message

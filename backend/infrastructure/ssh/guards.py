@@ -2,13 +2,16 @@ from infrastructure.ssh.path_utils import is_subpath, normalize_remote_path
 from infrastructure.ssh.policy import CommandPolicy
 
 
-def allowed_dirs_for_server(server) -> list[str]:
-    return [item.path for item in server.allowed_dirs.all()]
+def allowed_dirs_for_server(server, purposes: set[str] | None = None) -> list[str]:
+    dirs = server.allowed_dirs.all()
+    if purposes:
+        dirs = dirs.filter(purpose__in=purposes)
+    return [item.path for item in dirs]
 
 
-def validate_server_workdir(server, workdir: str) -> str:
+def validate_server_workdir(server, workdir: str, purposes: set[str] | None = None) -> str:
     normalized = normalize_remote_path(workdir)
-    allowed_dirs = allowed_dirs_for_server(server)
+    allowed_dirs = allowed_dirs_for_server(server, purposes)
     if not allowed_dirs:
         raise PermissionError("Server has no allowed directories configured")
     if not any(is_subpath(normalized, base) for base in allowed_dirs):

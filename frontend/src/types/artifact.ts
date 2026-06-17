@@ -6,12 +6,14 @@ export type ArtifactType =
   | 'benchmark_script'
   | 'benchmark_log'
   | 'benchmark_report'
+  | 'script_log'
+  | 'script_output'
 
 export interface Artifact {
   id: number
   project_id: number
   job_type: string
-  job_id: number
+  job_id: number | null
   artifact_type: ArtifactType
   file_name: string
   storage_path: string

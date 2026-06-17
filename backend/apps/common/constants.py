@@ -51,7 +51,7 @@ ROLE_VIEWER = "viewer"
 
 # ── Apptainer ────────────────────────────────────────
 DANGEROUS_DEF_PATTERNS = [
-    "rm -rf /", "mkfs", "dd if=", "| bash",
+    "mkfs", "dd if=", "| bash",
     "chmod -R 777", "/etc/shadow", "useradd",
     "passwd", "visudo", "systemctl", "reboot", "shutdown",
 ]

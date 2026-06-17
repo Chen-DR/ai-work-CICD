@@ -6,7 +6,8 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.authtoken.models import Token
 from apps.common.response import success, error
 from apps.audit.services import client_ip, log_action
-from .serializers import LoginSerializer, UserSerializer
+from .models import UserProfile
+from .serializers import LoginSerializer, RegisterSerializer, UserSerializer
 
 
 @api_view(["POST"])
@@ -38,6 +39,40 @@ def login_view(request):
         "token": token.key,
         "user": UserSerializer(user).data,
     })
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def register_view(request):
+    serializer = RegisterSerializer(data=request.data)
+    if not serializer.is_valid():
+        return error(40001, "Invalid parameters", serializer.errors)
+
+    user = User.objects.create_user(
+        username=serializer.validated_data["username"],
+        password=serializer.validated_data["password"],
+    )
+    UserProfile.objects.create(
+        user=user,
+        display_name=serializer.validated_data.get("display_name", ""),
+        role="developer",
+    )
+
+    django_login(request, user)
+    token, _ = Token.objects.get_or_create(user=user)
+    log_action(
+        user,
+        "auth.register",
+        "user",
+        user.id,
+        ip_address=client_ip(request),
+        detail={"username": user.username},
+    )
+
+    return success({
+        "token": token.key,
+        "user": UserSerializer(user).data,
+    }, status=201)
 
 
 @api_view(["POST"])

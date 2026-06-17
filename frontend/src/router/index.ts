@@ -76,6 +76,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '上传脚本', icon: 'Upload' },
       },
       {
+        path: 'scripts',
+        name: 'Scripts',
+        component: () => import('@/views/Scripts/index.vue'),
+        meta: { title: '脚本管理', icon: 'Files' },
+      },
+      {
         path: 'benchmark/jobs',
         name: 'BenchmarkJobList',
         component: () => import('@/views/Benchmark/JobList.vue'),

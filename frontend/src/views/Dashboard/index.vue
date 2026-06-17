@@ -351,7 +351,15 @@ const servers = computed(() => {
 })
 
 // ======== Alerts (no source yet; will come from audit/monitoring) ========
-const alerts = ref([])
+type AlertSeverity = 'critical' | 'warning' | 'info'
+interface AlertItem {
+  id: number | string
+  severity: AlertSeverity
+  message: string
+  source: string
+  time: string
+}
+const alerts = ref<AlertItem[]>([])
 
 // ======== Failed tasks (from API) ========
 const failedTasks = computed(() => {

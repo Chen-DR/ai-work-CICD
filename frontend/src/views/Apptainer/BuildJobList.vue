@@ -21,7 +21,7 @@
         </template>
       </el-table-column>
       <el-table-column prop="started_at" label="开始时间" width="170" />
-      <el-table-column label="操作" width="150" fixed="right">
+      <el-table-column label="操作" width="220" fixed="right">
         <template #default="{ row }">
           <el-button size="small" @click="$router.push(`/apptainer/build-jobs/${row.id}`)">
             详情
@@ -34,6 +34,14 @@
           >
             取消
           </el-button>
+          <el-button
+            v-if="canDelete(row)"
+            size="small"
+            type="danger"
+            @click="handleDelete(row)"
+          >
+            删除
+          </el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -42,14 +50,15 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import JobStatusTag from '@/components/JobStatusTag/index.vue'
-import { getBuildJobs, cancelBuildJob } from '@/api/apptainer'
+import { getBuildJobs, cancelBuildJob, deleteBuildJob } from '@/api/apptainer'
 import { usePolling } from '@/utils/usePolling'
-import type { ApptainerBuildJob } from '@/types/apptainer'
+import type { ApptainerBuildJob, BuildJobStatus } from '@/types/apptainer'
 
 const jobs = ref<ApptainerBuildJob[]>([])
 const loading = ref(false)
+const deletableStatuses: BuildJobStatus[] = ['SUCCESS', 'FAILED', 'CANCELLED', 'TIMEOUT']
 
 const { start: startPolling } = usePolling(fetchJobs, 5000)
 
@@ -62,6 +71,10 @@ async function fetchJobs() {
   }
 }
 
+function canDelete(job: ApptainerBuildJob) {
+  return deletableStatuses.includes(job.status)
+}
+
 async function handleCancel(job: ApptainerBuildJob) {
   try {
     await cancelBuildJob(job.id)
@@ -69,6 +82,17 @@ async function handleCancel(job: ApptainerBuildJob) {
     await fetchJobs()
   } catch {
     ElMessage.error('取消失败')
+  }
+}
+
+async function handleDelete(job: ApptainerBuildJob) {
+  try {
+    await ElMessageBox.confirm(`确定删除构建任务 #${job.id} 吗？`, '确认', { type: 'warning' })
+    await deleteBuildJob(job.id)
+    ElMessage.success('删除成功')
+    await fetchJobs()
+  } catch {
+    // cancelled
   }
 }
 

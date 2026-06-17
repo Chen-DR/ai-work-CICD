@@ -39,4 +39,4 @@ class ArtifactBriefSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Artifact
-        fields = ["id", "file_name", "file_size", "created_at"]
+        fields = ["id", "artifact_type", "file_name", "file_size", "created_at"]

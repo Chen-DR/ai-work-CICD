@@ -5,7 +5,7 @@ from rest_framework.generics import ListAPIView
 from apps.common.response import success, error
 from .models import Conversation, Message
 from .serializers import ConversationSerializer, MessageSerializer, CompleteSerializer
-from .services import ChatService
+from .services import ChatConfigError, ChatService
 
 
 class ConversationViewSet(viewsets.ModelViewSet):
@@ -46,5 +46,7 @@ def complete(request):
         return success(result)
     except Conversation.DoesNotExist:
         return error(40401, "Conversation not found", status=404)
+    except ChatConfigError as e:
+        return error(70002, str(e), status=400)
     except Exception as e:
         return error(70001, f"Chat completion failed: {str(e)}", status=500)

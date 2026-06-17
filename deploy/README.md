@@ -50,19 +50,12 @@ cp .env.example .env
 ```bash
 DJANGO_SECRET_KEY=your-random-secret-key-here
 DEEPSEEK_API_KEY=sk-your-deepseek-api-key
-ENCRYPTION_KEY=your-fernet-key-for-credentials
 DB_NAME=aiops
 DB_USER=aiops
 DB_PASSWORD=your-db-password
 DB_HOST=127.0.0.1
 DB_PORT=3306
 ```
-
-> `ENCRYPTION_KEY` 生成方式：
-> ```python
-> from cryptography.fernet import Fernet
-> print(Fernet.generate_key().decode())
-> ```
 
 ### 2.3 初始化数据库
 
@@ -117,16 +110,37 @@ npm run build
 
 ---
 
-## 4. Celery 异步任务
+## 4. 本地中间件与 Celery 异步任务
 
-### 4.1 启动 Redis
+### 4.1 使用 Docker 启动 MySQL 和 Redis
 
 ```bash
-# 方式一：直接启动
-redis-server
+# 在仓库根目录执行
+cp backend/.env.example backend/.env
+# 编辑 backend/.env，至少确认 DB_PASSWORD、MYSQL_ROOT_PASSWORD、REDIS_URL
 
-# 方式二：Docker
-docker run -d -p 6379:6379 redis:7-alpine
+docker compose --env-file backend/.env -f deploy/docker-compose.local.yml up -d
+docker compose --env-file backend/.env -f deploy/docker-compose.local.yml ps
+```
+
+本地代码继续连接：
+
+```bash
+DB_HOST=127.0.0.1
+DB_PORT=3306
+REDIS_URL=redis://127.0.0.1:6379/0
+```
+
+停止中间件：
+
+```bash
+docker compose --env-file backend/.env -f deploy/docker-compose.local.yml down
+```
+
+如需清空本地 MySQL/Redis 数据：
+
+```bash
+docker compose --env-file backend/.env -f deploy/docker-compose.local.yml down -v
 ```
 
 ### 4.2 启动 Celery Worker
@@ -163,6 +177,7 @@ celery -A config flower --port=5555
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
+| POST | `/api/v1/auth/register/` | 注册普通用户，默认角色为 `developer` |
 | POST | `/api/v1/auth/login/` | 登录，返回 token + user |
 | POST | `/api/v1/auth/logout/` | 登出 |
 | GET  | `/api/v1/auth/me/` | 当前用户信息 |
@@ -287,14 +302,16 @@ Backend → MySQL (:3306)
                                 └── SSH/SFTP → Remote Servers
 ```
 
-### 6.3 分步启动（开发调试）
+### 6.3 分步启动（本地代码 + 容器中间件）
 
 ```bash
-# 终端 1：Redis
-redis-server
+# 终端 1：MySQL + Redis
+cp backend/.env.example backend/.env
+docker compose --env-file backend/.env -f deploy/docker-compose.local.yml up -d
 
-# 终端 2：后端
+# 终端 2：后端 API
 cd backend && source .venv/bin/activate
+python manage.py migrate
 python manage.py runserver 0.0.0.0:8000
 
 # 终端 3：Celery
@@ -326,7 +343,6 @@ cd frontend && npm run dev
 | `DEEPSEEK_API_KEY` | ✅ | - | DeepSeek API 密钥 |
 | `DEEPSEEK_BASE_URL` | | `https://api.deepseek.com` | API 端点 |
 | `DEEPSEEK_MODEL` | | `deepseek-chat` | 模型名 |
-| `ENCRYPTION_KEY` | ✅ | - | 凭据加密密钥（Fernet 格式） |
 | `MAX_UPLOAD_SIZE_MB` | | `100` | 上传文件大小限制 |
 | `JOB_LOG_TAIL_LINES` | | `200` | 日志尾部读取行数 |
 
@@ -342,3 +358,22 @@ A: 确认 Redis 已启动且有 `celery worker` 在运行中。查看 `celery -A
 
 ### Q: 构建/压测任务一直 PENDING
 A: Celery Worker 未启动或无法连接 Redis。检查 Redis 地址是否与 `.env` 一致。
+
+### Q: `pip install -r requirements.txt` 安装 `mysqlclient` 失败
+A: 如果错误包含 `pkg-config: not found` 或 `Can not find valid pkg-config name`，说明本机缺少 `mysqlclient` 的编译依赖。
+
+使用 conda 环境时，优先安装预编译包：
+
+```bash
+conda activate aiops
+conda install -n aiops -c conda-forge mysqlclient -y
+pip install -r requirements.txt
+```
+
+如果必须使用 pip 编译安装，则先安装系统依赖：
+
+```bash
+sudo apt-get update
+sudo apt-get install -y python3-dev default-libmysqlclient-dev build-essential pkg-config
+pip install -r requirements.txt
+```

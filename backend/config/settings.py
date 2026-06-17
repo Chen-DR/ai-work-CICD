@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     "apps.audit",
     "apps.common",
     "apps.dashboard",
+    "apps.scripts",
 ]
 
 MIDDLEWARE = [
@@ -154,12 +155,17 @@ DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
 DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
 DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
 
-# ── Encryption ────────────────────────────────────────
-ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY", "")
-
 # ── Storage ───────────────────────────────────────────
 DATA_ROOT = os.getenv("DATA_ROOT", str(BASE_DIR / "data"))
 MAX_UPLOAD_SIZE_MB = int(os.getenv("MAX_UPLOAD_SIZE_MB", "100"))
 
 # ── Jobs ──────────────────────────────────────────────
 JOB_LOG_TAIL_LINES = int(os.getenv("JOB_LOG_TAIL_LINES", "200"))
+
+# ── Script management ────────────────────────────────
+SCRIPT_ALLOWED_CWDS = [
+    item.strip()
+    for item in os.getenv("SCRIPT_ALLOWED_CWDS", "/opt,/home").split(",")
+    if item.strip()
+]
+SCRIPT_DEFAULT_TIMEOUT = int(os.getenv("SCRIPT_DEFAULT_TIMEOUT", "3600"))

@@ -1,12 +1,15 @@
 export interface ApptainerDefinition {
   id: number
   project_id: number
+  project?: number
   conversation_id: number
+  conversation?: number | null
   name: string
   version: string
   content: string
   storage_path: string
   created_by_id: number
+  created_by?: number | null
   created_at: string
   updated_at: string
 }

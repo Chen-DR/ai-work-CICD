@@ -14,7 +14,6 @@ def run_apptainer_build_task(self, job_id):
     from infrastructure.ssh.executor import SSHExecutor
     from infrastructure.ssh.sftp import SFTPClient
     from infrastructure.ssh.guards import validate_safe_command, validate_server_remote_path, validate_server_workdir
-    from infrastructure.security.encryptor import decrypt
     from apps.artifacts.utils import create_artifact
     from .validators import validate_build_params
 
@@ -31,6 +30,20 @@ def run_apptainer_build_task(self, job_id):
         with open(full_log_path, "a") as f:
             f.write(line)
 
+    streamed_chunks: list[str] = []
+
+    def stream_log(line: str):
+        normalized = line.replace("\r", "\n")
+        streamed_chunks.append(normalized)
+        log_line(normalized)
+
+    def append_unstreamed_output(*outputs: str):
+        streamed_text = "".join(streamed_chunks)
+        for output in outputs:
+            if output and output not in streamed_text:
+                normalized = output.replace("\r", "\n")
+                log_line(normalized if normalized.endswith("\n") else f"{normalized}\n")
+
     try:
         # Validate
         param_errors = validate_build_params(job.workdir, job.output_name)
@@ -44,8 +57,8 @@ def run_apptainer_build_task(self, job_id):
             raise FileNotFoundError(f"Definition file not found: {job.definition.storage_path}")
 
         creds = get_server_credentials(job.server)
-        password = decrypt(creds["password"]) if creds.get("password") else ""
-        pkey = decrypt(creds.get("ssh_key", "")) if creds.get("ssh_key") else ""
+        password = creds.get("password", "")
+        pkey = creds.get("ssh_key", "")
 
         host = job.server.host
         port = job.server.port
@@ -77,8 +90,10 @@ def run_apptainer_build_task(self, job_id):
         exit_code, stdout, stderr = executor.run_command(
             command,
             timeout=3600,
-            log_callback=lambda line: log_line(line),
+            log_callback=stream_log,
+            get_pty=True,
         )
+        append_unstreamed_output(stdout, stderr)
 
         if exit_code != 0:
               raise RuntimeError(f"Build failed with exit code {exit_code}: {stderr or stdout.strip()}")

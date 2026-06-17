@@ -14,7 +14,6 @@ def run_benchmark_job_task(self, job_id):
     from infrastructure.ssh.executor import SSHExecutor
     from infrastructure.ssh.sftp import SFTPClient
     from infrastructure.ssh.guards import validate_safe_command, validate_server_remote_path, validate_server_workdir
-    from infrastructure.security.encryptor import decrypt
     from apps.artifacts.utils import create_artifact
     from .validators import validate_benchmark_params
 
@@ -31,6 +30,20 @@ def run_benchmark_job_task(self, job_id):
         with open(full_log_path, "a") as f:
             f.write(line)
 
+    streamed_chunks: list[str] = []
+
+    def stream_log(line: str):
+        normalized = line.replace("\r", "\n")
+        streamed_chunks.append(normalized)
+        log_line(normalized)
+
+    def append_unstreamed_output(*outputs: str):
+        streamed_text = "".join(streamed_chunks)
+        for output in outputs:
+            if output and output not in streamed_text:
+                normalized = output.replace("\r", "\n")
+                log_line(normalized if normalized.endswith("\n") else f"{normalized}\n")
+
     try:
         param_errors = validate_benchmark_params(job.params or {})
         if param_errors:
@@ -41,8 +54,8 @@ def run_benchmark_job_task(self, job_id):
             raise FileNotFoundError(f"Benchmark script not found: {job.script.storage_path}")
 
         creds = get_server_credentials(job.server)
-        password = decrypt(creds["password"]) if creds.get("password") else ""
-        pkey = decrypt(creds.get("ssh_key", "")) if creds.get("ssh_key") else ""
+        password = creds.get("password", "")
+        pkey = creds.get("ssh_key", "")
         host = job.server.host
         port = job.server.port
         username = job.server.username
@@ -80,8 +93,12 @@ def run_benchmark_job_task(self, job_id):
 
         executor = SSHExecutor(host, port, username, password, pkey)
         exit_code, stdout, stderr = executor.run_command(
-            command, timeout=3600, log_callback=lambda l: log_line(l)
+            command,
+            timeout=3600,
+            log_callback=stream_log,
+            get_pty=True,
         )
+        append_unstreamed_output(stdout, stderr)
 
         if exit_code != 0:
           raise RuntimeError(f"Benchmark failed: {stderr or stdout.strip()}")

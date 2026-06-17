@@ -5,7 +5,10 @@ from .models import Server, ServerCredential, ServerAllowedDir, ServerMetric
 class ServerSerializer(serializers.ModelSerializer):
     class Meta:
         model = Server
-        fields = ["id", "project_id", "name", "host", "port", "username", "auth_type", "status", "created_at", "updated_at"]
+        fields = [
+            "id", "project_id", "name", "host", "port", "username",
+            "auth_type", "status", "allow_script_root", "created_at", "updated_at",
+        ]
         read_only_fields = ["id", "status", "created_at", "updated_at"]
 
 

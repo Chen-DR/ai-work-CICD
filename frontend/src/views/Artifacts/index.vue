@@ -13,6 +13,8 @@
         <el-option label="压测脚本" value="benchmark_script" />
         <el-option label="压测日志" value="benchmark_log" />
         <el-option label="压测报告" value="benchmark_report" />
+        <el-option label="脚本日志" value="script_log" />
+        <el-option label="脚本产物" value="script_output" />
       </el-select>
     </div>
 
@@ -63,6 +65,8 @@ function artifactTypeLabel(type: ArtifactType): string {
     benchmark_script: '压测脚本',
     benchmark_log: '压测日志',
     benchmark_report: '压测报告',
+    script_log: '脚本日志',
+    script_output: '脚本产物',
   }
   return map[type] || type
 }

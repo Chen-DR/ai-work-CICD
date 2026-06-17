@@ -19,6 +19,15 @@
             {{ server?.auth_type === 'ssh_key' ? 'SSH Key' : '密码' }}
           </el-tag>
         </el-descriptions-item>
+        <el-descriptions-item label="脚本 root 执行">
+          <el-switch
+            :model-value="server?.allow_script_root || false"
+            active-text="允许"
+            inactive-text="禁止"
+            :loading="savingPolicy"
+            @change="handleRootPolicyChange"
+          />
+        </el-descriptions-item>
         <el-descriptions-item label="创建时间">{{ server?.created_at || '-' }}</el-descriptions-item>
         <el-descriptions-item label="更新时间">{{ server?.updated_at || '-' }}</el-descriptions-item>
       </el-descriptions>
@@ -76,6 +85,7 @@
           <el-select v-model="newDir.purpose" style="width: 100%">
             <el-option label="构建" value="build" />
             <el-option label="压测" value="benchmark" />
+            <el-option label="脚本" value="script" />
             <el-option label="报告" value="report" />
             <el-option label="通用" value="general" />
           </el-select>
@@ -93,9 +103,17 @@
 import { ref, onMounted, reactive } from 'vue'
 import { useRoute } from 'vue-router'
 import { Plus } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import JobStatusTag from '@/components/JobStatusTag/index.vue'
-import { getServer, testServerConnection, detectServerEnvironment } from '@/api/servers'
+import {
+  getServer,
+  testServerConnection,
+  detectServerEnvironment,
+  getServerAllowedDirs,
+  createServerAllowedDir,
+  deleteServerAllowedDir,
+  updateServer,
+} from '@/api/servers'
 import type { Server, ServerDetectResult, ServerAllowedDir } from '@/types/server'
 
 const route = useRoute()
@@ -103,6 +121,7 @@ const server = ref<Server | null>(null)
 const loading = ref(false)
 const testing = ref(false)
 const detecting = ref(false)
+const savingPolicy = ref(false)
 const detectResult = ref<ServerDetectResult | null>(null)
 const allowedDirs = ref<ServerAllowedDir[]>([])
 
@@ -114,9 +133,14 @@ async function fetchServer() {
   loading.value = true
   try {
     server.value = await getServer(Number(route.params.id))
+    await fetchAllowedDirs()
   } finally {
     loading.value = false
   }
+}
+
+async function fetchAllowedDirs() {
+  allowedDirs.value = await getServerAllowedDirs(Number(route.params.id))
 }
 
 async function handleTest() {
@@ -129,7 +153,7 @@ async function handleTest() {
       ElMessage.error(result.message || '连接失败')
     }
   } catch (e: any) {
-    ElMessage.error(e.message || '测试失败')
+    if (!e.handled) ElMessage.error(e.message || '测试失败')
   } finally {
     testing.value = false
   }
@@ -141,9 +165,20 @@ async function handleDetect() {
     detectResult.value = await detectServerEnvironment(Number(route.params.id))
     ElMessage.success('环境检测完成')
   } catch (e: any) {
-    ElMessage.error(e.message || '检测失败')
+    if (!e.handled) ElMessage.error(e.message || '检测失败')
   } finally {
     detecting.value = false
+  }
+}
+
+async function handleRootPolicyChange(value: string | number | boolean) {
+  if (!server.value) return
+  savingPolicy.value = true
+  try {
+    server.value = await updateServer(server.value.id, { allow_script_root: Boolean(value) })
+    ElMessage.success(Boolean(value) ? '已允许该服务器脚本 root 执行' : '已禁止该服务器脚本 root 执行')
+  } finally {
+    savingPolicy.value = false
   }
 }
 
@@ -160,7 +195,11 @@ async function handleAddDir() {
   }
   addingDir.value = true
   try {
-    // TODO: add allowed dir API
+    await createServerAllowedDir(Number(route.params.id), {
+      path: newDir.path,
+      purpose: newDir.purpose,
+    })
+    await fetchAllowedDirs()
     ElMessage.success('添加成功')
     addDirVisible.value = false
   } finally {
@@ -168,8 +207,10 @@ async function handleAddDir() {
   }
 }
 
-function handleRemoveDir(dir: ServerAllowedDir) {
-  // TODO: remove allowed dir API
+async function handleRemoveDir(dir: ServerAllowedDir) {
+  await ElMessageBox.confirm(`确定删除允许目录「${dir.path}」吗？`, '确认', { type: 'warning' })
+  await deleteServerAllowedDir(Number(route.params.id), dir.id)
+  await fetchAllowedDirs()
   ElMessage.success('已删除')
 }
 

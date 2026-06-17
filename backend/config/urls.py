@@ -14,4 +14,5 @@ urlpatterns = [
     path("api/v1/artifacts/", include("apps.artifacts.urls")),
     path("api/v1/audit/", include("apps.audit.urls")),
     path("api/v1/dashboard/", include("apps.dashboard.urls")),
+    path("api/v1/", include("apps.scripts.urls")),
 ]

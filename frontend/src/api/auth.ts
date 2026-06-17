@@ -1,8 +1,12 @@
 import request from './request'
-import type { LoginRequest, User } from '@/types/user'
+import type { LoginRequest, RegisterRequest, User } from '@/types/user'
 
 export function login(data: LoginRequest) {
   return request.post<{ token: string; user: User }>('/auth/login/', data)
+}
+
+export function register(data: RegisterRequest) {
+  return request.post<{ token: string; user: User }>('/auth/register/', data)
 }
 
 export function logout() {

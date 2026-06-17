@@ -9,12 +9,20 @@
 
     <el-form label-position="top" class="definition-form">
       <el-row :gutter="20">
-        <el-col :span="12">
+        <el-col :span="8">
+          <el-form-item v-if="isNew" label="所属项目" required>
+            <ProjectSelector v-model="form.project_id" />
+          </el-form-item>
+          <el-form-item v-else label="所属项目">
+            <el-input :model-value="definitionProjectName" disabled placeholder="-" />
+          </el-form-item>
+        </el-col>
+        <el-col :span="8">
           <el-form-item label="名称">
             <el-input v-model="form.name" placeholder="definition 名称" />
           </el-form-item>
         </el-col>
-        <el-col :span="12">
+        <el-col :span="8">
           <el-form-item label="版本">
             <el-input v-model="form.version" placeholder="v1" />
           </el-form-item>
@@ -27,6 +35,7 @@
           :readonly="!editing"
           title="Apptainer Definition File"
           :saving="saving"
+          language="apptainer"
           @edit="editing = true"
           @save="handleSave"
           @cancel="cancelEdit"
@@ -44,7 +53,7 @@
     <el-dialog v-model="buildVisible" title="创建构建任务" width="550px">
       <el-form label-position="top">
         <el-form-item label="目标服务器">
-          <ServerSelector v-model="buildForm.server_id" :project-id="definition?.project_id" />
+          <ServerSelector v-model="buildForm.server_id" :project-id="definitionProjectId" />
         </el-form-item>
         <el-form-item label="工作目录">
           <el-input v-model="buildForm.workdir" placeholder="/data/builds" />
@@ -67,19 +76,29 @@ import { useRoute, useRouter } from 'vue-router'
 import { Cpu } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import CodeEditor from '@/components/CodeEditor/index.vue'
+import ProjectSelector from '@/components/ProjectSelector/index.vue'
 import ServerSelector from '@/components/ServerSelector/index.vue'
 import { getDefinition, createDefinition, updateDefinition, createBuildJob } from '@/api/apptainer'
+import { useProjectStore } from '@/stores/project'
+import { sanitizeSifFileName } from '@/utils/file'
 import type { ApptainerDefinition } from '@/types/apptainer'
 
 const route = useRoute()
 const router = useRouter()
+const projectStore = useProjectStore()
 
 const isNew = computed(() => route.params.id === 'new')
+const definitionProjectId = computed(() => definition.value?.project_id ?? definition.value?.project ?? null)
+const definitionProjectName = computed(() => {
+  const projectId = definitionProjectId.value
+  return projectStore.projects.find(p => p.id === projectId)?.name || (projectId ? `项目 #${projectId}` : '-')
+})
 const editing = ref(true)
 const saving = ref(false)
 const definition = ref<ApptainerDefinition | null>(null)
 
 const form = reactive({
+  project_id: projectStore.getCurrentProjectId() as number | null,
   name: '',
   version: 'v1',
   content: `Bootstrap: docker
@@ -112,6 +131,7 @@ onMounted(async () => {
     const id = Number(route.params.id)
     try {
       definition.value = await getDefinition(id)
+      form.project_id = definition.value.project_id ?? definition.value.project ?? null
       form.name = definition.value.name
       form.version = definition.value.version
       form.content = definition.value.content
@@ -126,6 +146,7 @@ function cancelEdit() {
   if (isNew.value) {
     router.push('/apptainer/definitions')
   } else if (definition.value) {
+    form.project_id = definition.value.project_id ?? definition.value.project ?? null
     form.name = definition.value.name
     form.version = definition.value.version
     form.content = definition.value.content
@@ -138,11 +159,16 @@ async function handleSave() {
     ElMessage.warning('请填写名称和内容')
     return
   }
+  if (isNew.value && !form.project_id) {
+    ElMessage.warning('请选择所属项目')
+    return
+  }
 
   saving.value = true
   try {
     if (isNew.value) {
       const def = await createDefinition({
+        project_id: form.project_id!,
         name: form.name,
         version: form.version,
         content: form.content,
@@ -161,7 +187,7 @@ async function handleSave() {
       definition.value = await getDefinition(Number(route.params.id))
     }
   } catch (e: any) {
-    ElMessage.error(e.message || '保存失败')
+    if (!e.handled) ElMessage.error(e.message || '保存失败')
   } finally {
     saving.value = false
   }
@@ -170,18 +196,26 @@ async function handleSave() {
 function showBuildDialog() {
   buildForm.server_id = null
   buildForm.workdir = ''
-  buildForm.output_name = `${form.name || 'output'}.sif`
+  buildForm.output_name = sanitizeSifFileName(form.name)
   buildVisible.value = true
 }
 
 async function handleCreateBuild() {
-  if (!definition.value) return
+  const projectId = definitionProjectId.value
+  if (!definition.value || !projectId) {
+    ElMessage.warning('Definition 缺少项目归属，无法创建构建任务')
+    return
+  }
+  if (!buildForm.server_id) {
+    ElMessage.warning('请选择目标服务器')
+    return
+  }
   creatingBuild.value = true
   try {
     const job = await createBuildJob({
-      project_id: definition.value.project_id,
+      project_id: projectId,
       definition_id: definition.value.id,
-      server_id: buildForm.server_id!,
+      server_id: buildForm.server_id,
       workdir: buildForm.workdir,
       output_name: buildForm.output_name,
     })
@@ -189,7 +223,7 @@ async function handleCreateBuild() {
     buildVisible.value = false
     router.push(`/apptainer/build-jobs/${job.id}`)
   } catch (e: any) {
-    ElMessage.error(e.message || '创建失败')
+    if (!e.handled) ElMessage.error(e.message || '创建失败')
   } finally {
     creatingBuild.value = false
   }

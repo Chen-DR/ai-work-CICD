@@ -85,6 +85,7 @@ import ServerSelector from '@/components/ServerSelector/index.vue'
 import { getDefinitions, deleteDefinition, generateDefinition, createBuildJob } from '@/api/apptainer'
 import { useProjectStore } from '@/stores/project'
 import { useRouter } from 'vue-router'
+import { sanitizeSifFileName } from '@/utils/file'
 import type { ApptainerDefinition } from '@/types/apptainer'
 
 const router = useRouter()
@@ -145,7 +146,7 @@ async function handleGenerate() {
     await fetchDefinitions()
     router.push(`/apptainer/definitions/${def.id}`)
   } catch (e: any) {
-    ElMessage.error(e.message || '生成失败')
+    if (!e.handled) ElMessage.error(e.message || '生成失败')
   } finally {
     generating.value = false
   }
@@ -153,21 +154,28 @@ async function handleGenerate() {
 
 function showBuildDialog(def: ApptainerDefinition) {
   buildTarget.value = def
-  buildForm.project_id = def.project_id
+  buildForm.project_id = def.project_id ?? def.project ?? null
   buildForm.server_id = null
   buildForm.workdir = ''
-  buildForm.output_name = `${def.name}.sif`
+  buildForm.output_name = sanitizeSifFileName(def.name)
   buildVisible.value = true
 }
 
 async function handleCreateBuild() {
-  if (!buildTarget.value) return
+  if (!buildTarget.value || !buildForm.project_id) {
+    ElMessage.warning('Definition 缺少项目归属，无法创建构建任务')
+    return
+  }
+  if (!buildForm.server_id) {
+    ElMessage.warning('请选择目标服务器')
+    return
+  }
   creatingBuild.value = true
   try {
     const job = await createBuildJob({
-      project_id: buildTarget.value.project_id,
+      project_id: buildForm.project_id,
       definition_id: buildTarget.value.id,
-      server_id: buildForm.server_id!,
+      server_id: buildForm.server_id,
       workdir: buildForm.workdir,
       output_name: buildForm.output_name,
     })
@@ -175,7 +183,7 @@ async function handleCreateBuild() {
     buildVisible.value = false
     router.push(`/apptainer/build-jobs/${job.id}`)
   } catch (e: any) {
-    ElMessage.error(e.message || '创建失败')
+    if (!e.handled) ElMessage.error(e.message || '创建失败')
   } finally {
     creatingBuild.value = false
   }

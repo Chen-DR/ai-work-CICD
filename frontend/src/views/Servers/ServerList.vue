@@ -96,7 +96,7 @@ async function handleTestConnection(server: Server) {
       ElMessage.error(result.message || '连接失败')
     }
   } catch (e: any) {
-    ElMessage.error(e.message || '连接测试失败')
+    if (!e.handled) ElMessage.error(e.message || '连接测试失败')
   }
 }
 

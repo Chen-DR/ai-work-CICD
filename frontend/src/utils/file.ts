@@ -34,3 +34,13 @@ export function readFileContent(file: File): Promise<string> {
     reader.readAsText(file)
   })
 }
+
+export function sanitizeSifFileName(name: string, fallback = 'apptainer-output'): string {
+  const base = name
+    .replace(/\.sif$/i, '')
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80)
+
+  return `${base || fallback}.sif`
+}

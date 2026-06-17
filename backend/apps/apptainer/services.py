@@ -28,12 +28,72 @@ class ApptainerService:
         definition = ApptainerDefinition.objects.create(**kwargs)
         return self.persist_definition_file(definition)
 
+    def _extract_definition_content(self, answer: str) -> str:
+        """Extract the definition body from model output while rejecting prose-only answers."""
+        lines = answer.replace("\r\n", "\n").split("\n")
+        fenced_blocks: list[list[str]] = []
+        current_block: list[str] | None = None
+
+        for line in lines:
+            if line.strip().startswith("```"):
+                if current_block is None:
+                    current_block = []
+                else:
+                    fenced_blocks.append(current_block)
+                    current_block = None
+                continue
+            if current_block is not None:
+                current_block.append(line)
+
+        candidates = ["\n".join(block).strip() for block in fenced_blocks]
+        candidates.append(answer.strip())
+
+        for candidate in candidates:
+            candidate_lines = candidate.split("\n")
+            def_lines = []
+            in_def = False
+            for line in candidate_lines:
+                if line.lstrip().startswith("Bootstrap:"):
+                    in_def = True
+                if in_def:
+                    def_lines.append(line)
+            content = "\n".join(def_lines).strip()
+            if "Bootstrap:" in content and "From:" in content:
+                return content
+
+        return answer.strip()
+
+    def _request_definition(self, messages: list[dict], requirement: str) -> str:
+        response = self.llm.chat(messages, temperature=0.1, max_tokens=4000)
+        answer = response["choices"][0]["message"].get("content", "")
+        def_content = self._extract_definition_content(answer)
+        errors = validate_definition_content(def_content)
+        if not errors:
+            return def_content
+
+        retry_messages = messages + [
+            {
+                "role": "system",
+                "content": (
+                    "The previous answer was invalid because required sections were missing "
+                    "or unsafe command text appeared in the output. "
+                    + "\nReturn ONLY a valid Apptainer definition file. "
+                    "The first non-empty line must be 'Bootstrap:'. Include 'From:'."
+                ),
+            },
+            {"role": "user", "content": requirement},
+        ]
+        retry_response = self.llm.chat(retry_messages, temperature=0.0, max_tokens=4000)
+        retry_answer = retry_response["choices"][0]["message"].get("content", "")
+        return self._extract_definition_content(retry_answer)
+
     def generate_definition(
         self,
         project_id: int,
         conversation_id: int,
         requirement: str = "",
         use_knowledge: bool = True,
+        created_by=None,
     ) -> ApptainerDefinition:
         messages = [{"role": "system", "content": APPTAINER_GENERATE_PROMPT}]
 
@@ -60,22 +120,7 @@ class ApptainerService:
 
         messages.append({"role": "user", "content": requirement})
 
-        response = self.llm.chat(messages)
-        answer = response["choices"][0]["message"]["content"]
-
-        # Extract definition (content before first explanation)
-        lines = answer.split("\n")
-        def_lines = []
-        in_def = False
-        for line in lines:
-            if line.startswith("Bootstrap:"):
-                in_def = True
-            if in_def:
-                if line.startswith("```") and def_lines:
-                    break
-                def_lines.append(line)
-
-        def_content = "\n".join(def_lines) or answer
+        def_content = self._request_definition(messages, requirement)
 
         # Generate a name from the first meaningful line
         name = requirement.strip()[:60] if requirement.strip() else "ai-generated"
@@ -87,7 +132,7 @@ class ApptainerService:
             conversation_id=conversation_id,
             name=name[:80],
             content=def_content,
-            created_by=None,
+            created_by=created_by,
         )
         return definition
 

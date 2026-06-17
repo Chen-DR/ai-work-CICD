@@ -4,6 +4,7 @@ ALLOWED_ACTIONS = {
     "apptainer_build",
     "apptainer_test",
     "benchmark_run",
+    "script_run",
     "collect_report",
     "cleanup_workdir",
     "detect_environment",

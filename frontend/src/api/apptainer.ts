@@ -29,7 +29,7 @@ export function deleteDefinition(id: number) {
 }
 
 export function generateDefinition(data: GenerateDefinitionRequest) {
-  return request.post<ApptainerDefinition>('/apptainer/generate/', data)
+  return request.post<ApptainerDefinition>('/apptainer/generate/', data, { timeout: 180000 })
 }
 
 // Build Jobs
@@ -48,6 +48,10 @@ export function createBuildJob(data: CreateBuildJobRequest) {
 
 export function cancelBuildJob(id: number) {
   return request.post(`/apptainer/build-jobs/${id}/cancel/`)
+}
+
+export function deleteBuildJob(id: number) {
+  return request.delete(`/apptainer/build-jobs/${id}/`)
 }
 
 export function getBuildJobLogs(id: number, tail = 200) {

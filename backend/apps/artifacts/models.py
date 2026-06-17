@@ -10,6 +10,8 @@ class Artifact(models.Model):
         ("benchmark_script", "Benchmark Script"),
         ("benchmark_log", "Benchmark Log"),
         ("benchmark_report", "Benchmark Report"),
+        ("script_log", "Script Log"),
+        ("script_output", "Script Output"),
     ]
 
     project = models.ForeignKey("projects.Project", on_delete=models.CASCADE, related_name="artifacts")

@@ -3,8 +3,9 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from django.utils import timezone
 from apps.common.response import success, error
+from apps.common.validators import validate_workdir
 from apps.audit.services import client_ip, log_action
-from .models import Server, ServerMetric
+from .models import Server, ServerMetric, ServerAllowedDir
 from .serializers import ServerSerializer, ServerCreateSerializer, ServerAllowedDirSerializer, ServerMetricSerializer
 from .services import save_server_credentials, get_server_credentials
 from .metrics import collect_server_metrics
@@ -131,7 +132,7 @@ class ServerViewSet(viewsets.ModelViewSet):
                 "disk_info": results.get("disk", ""),
             })
         except Exception as e:
-            return error(60001, f"Detection failed: {str(e)}", status=500)
+            return error(60001, f"服务器环境检测失败：{str(e)}", status=500)
 
     @action(detail=True, methods=["get", "post"])
     def allowed_dirs(self, request, pk=None):
@@ -144,6 +145,10 @@ class ServerViewSet(viewsets.ModelViewSet):
         purpose = request.data.get("purpose", "general")
         if not path:
             return error(40001, "path is required")
+        if not validate_workdir(path):
+            return error(40001, "Invalid path")
+        if purpose not in dict(ServerAllowedDir.PURPOSE_CHOICES):
+            return error(40001, "Invalid purpose")
 
         allowed_dir = server.allowed_dirs.create(path=path, purpose=purpose)
         log_action(
@@ -156,6 +161,27 @@ class ServerViewSet(viewsets.ModelViewSet):
             detail={"server_id": server.id, "path": path, "purpose": purpose},
         )
         return success(ServerAllowedDirSerializer(allowed_dir).data, status=201)
+
+    @action(detail=True, methods=["delete"], url_path=r"allowed_dirs/(?P<dir_id>[^/.]+)")
+    def allowed_dir_detail(self, request, pk=None, dir_id=None):
+        server = self.get_object()
+        try:
+            allowed_dir = server.allowed_dirs.get(id=dir_id)
+        except ServerAllowedDir.DoesNotExist:
+            return error(40401, "Resource not found", status=404)
+
+        detail = {"server_id": server.id, "path": allowed_dir.path, "purpose": allowed_dir.purpose}
+        allowed_dir.delete()
+        log_action(
+            request.user,
+            "server.allowed_dir.delete",
+            "server_allowed_dir",
+            dir_id,
+            project_id=server.project_id,
+            ip_address=client_ip(request),
+            detail=detail,
+        )
+        return success({})
 
     @action(detail=True, methods=["post"])
     def collect_metrics(self, request, pk=None):

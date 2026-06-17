@@ -187,6 +187,8 @@ async function loadMessages(conversationId: number) {
 async function handleSend(text: string, useKnowledge: boolean) {
   const projectId = projectStore.getCurrentProjectId()
   if (!projectId || !currentConversationId.value) return
+  const conversationId = currentConversationId.value
+  const wasFirstMessage = messages.value.length === 0
 
   // Cancel any previous in-flight request
   abortController?.abort()
@@ -201,26 +203,19 @@ async function handleSend(text: string, useKnowledge: boolean) {
   try {
     const result = await complete({
       project_id: projectId,
-      conversation_id: currentConversationId.value,
+      conversation_id: conversationId,
       message: text,
       use_knowledge: useKnowledge,
     })
 
-    // Remove optimistic msg and add real messages
-    messages.value = messages.value.filter(m => m.id !== optimisticMsg.id)
+    if (currentConversationId.value !== conversationId) return
 
-    messages.value.push({
-      id: Date.now(),
-      conversation_id: currentConversationId.value,
-      role: 'assistant',
-      content: result.answer,
-      created_at: new Date().toISOString(),
-    })
-
+    // Replace the temporary user message with persisted user + assistant messages.
+    messages.value = await getMessages(conversationId)
     currentReferences.value = result.references || []
 
     // If first exchange, refresh conversation list to get AI-generated title
-    if (messages.value.length <= 2) {
+    if (wasFirstMessage) {
       await fetchConversations()
     }
 
@@ -228,7 +223,7 @@ async function handleSend(text: string, useKnowledge: boolean) {
   } catch (e: any) {
     // Remove optimistic message on failure
     messages.value = messages.value.filter(m => m.id !== optimisticMsg.id)
-    if (e.name !== 'CanceledError') {
+    if (e.name !== 'CanceledError' && !e.handled) {
       ElMessage.error(e.message || '对话请求失败')
     }
   } finally {
@@ -255,7 +250,7 @@ async function handleGenerateDef() {
     ElMessage.success('Definition 生成成功！')
     router.push(`/apptainer/definitions/${def.id}`)
   } catch (e: any) {
-    ElMessage.error(e.message || '生成失败')
+    if (!e.handled) ElMessage.error(e.message || '生成失败')
   } finally {
     generating.value = false
   }

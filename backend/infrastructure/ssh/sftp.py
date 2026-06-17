@@ -1,7 +1,8 @@
 import io
 import logging
 import paramiko
-import os
+import posixpath
+from stat import S_ISDIR
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -67,11 +68,23 @@ class SFTPClient:
             return False
 
     def mkdir(self, remote_path: str) -> bool:
+        sftp = None
         try:
             sftp = self._connect_sftp()
-            sftp.mkdir(remote_path)
-            sftp.close()
+            normalized = posixpath.normpath(remote_path)
+            current = "/" if normalized.startswith("/") else ""
+            for part in normalized.strip("/").split("/"):
+                current = posixpath.join(current, part) if current else part
+                try:
+                    attr = sftp.stat(current)
+                    if not S_ISDIR(attr.st_mode):
+                        return False
+                except FileNotFoundError:
+                    sftp.mkdir(current)
             return True
         except Exception as e:
             logger.error("SFTP mkdir failed: %s", str(e))
             return False
+        finally:
+            if sftp:
+                sftp.close()

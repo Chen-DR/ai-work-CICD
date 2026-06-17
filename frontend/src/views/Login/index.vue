@@ -8,11 +8,14 @@
         <h1 class="login-title">AI-Ops 平台</h1>
         <p class="login-subtitle">容器打包与服务器压测管理平台</p>
       </div>
+      <div class="auth-switch">
+        <el-segmented v-model="mode" :options="modeOptions" />
+      </div>
       <el-form
         ref="formRef"
         :model="form"
         :rules="rules"
-        @keyup.enter="handleLogin"
+        @keyup.enter="handleSubmit"
         size="large"
       >
         <el-form-item prop="username">
@@ -31,9 +34,27 @@
             show-password
           />
         </el-form-item>
+        <template v-if="mode === 'register'">
+          <el-form-item prop="confirm_password">
+            <el-input
+              v-model="form.confirm_password"
+              type="password"
+              placeholder="确认密码"
+              :prefix-icon="Lock"
+              show-password
+            />
+          </el-form-item>
+          <el-form-item prop="display_name">
+            <el-input
+              v-model="form.display_name"
+              placeholder="显示名称（可选）"
+              :prefix-icon="User"
+            />
+          </el-form-item>
+        </template>
         <el-form-item>
-          <el-button type="primary" :loading="loading" @click="handleLogin" class="login-btn">
-            {{ loading ? '登录中...' : '登 录' }}
+          <el-button type="primary" :loading="loading" @click="handleSubmit" class="login-btn">
+            {{ buttonText }}
           </el-button>
         </el-form-item>
       </el-form>
@@ -45,10 +66,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { computed, ref, reactive, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { User, Lock } from '@element-plus/icons-vue'
-import { login } from '@/api/auth'
+import { login, register } from '@/api/auth'
 import { useUserStore } from '@/stores/user'
 import type { FormInstance } from 'element-plus'
 
@@ -57,29 +78,83 @@ const userStore = useUserStore()
 const formRef = ref<FormInstance>()
 const loading = ref(false)
 const error = ref('')
+const mode = ref<'login' | 'register'>('login')
+const modeOptions = [
+  { label: '登录', value: 'login' },
+  { label: '注册', value: 'register' },
+]
 
 const form = reactive({
   username: '',
   password: '',
+  confirm_password: '',
+  display_name: '',
 })
+
+const validateConfirmPassword = (_rule: any, value: string, callback: (error?: Error) => void) => {
+  if (mode.value !== 'register') {
+    callback()
+    return
+  }
+  if (!value) {
+    callback(new Error('请再次输入密码'))
+    return
+  }
+  if (value !== form.password) {
+    callback(new Error('两次输入的密码不一致'))
+    return
+  }
+  callback()
+}
+
+const validatePassword = (_rule: any, value: string, callback: (error?: Error) => void) => {
+  if (!value) {
+    callback(new Error('请输入密码'))
+    return
+  }
+  if (mode.value === 'register' && value.length < 6) {
+    callback(new Error('密码至少 6 位'))
+    return
+  }
+  callback()
+}
 
 const rules = {
   username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
-  password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
+  password: [{ validator: validatePassword, trigger: 'blur' }],
+  confirm_password: [{ validator: validateConfirmPassword, trigger: 'blur' }],
+  display_name: [{ max: 128, message: '显示名称不能超过 128 个字符', trigger: 'blur' }],
 }
 
-async function handleLogin() {
+const buttonText = computed(() => {
+  if (loading.value) return mode.value === 'login' ? '登录中...' : '注册中...'
+  return mode.value === 'login' ? '登 录' : '注 册'
+})
+
+watch(mode, () => {
+  error.value = ''
+  formRef.value?.clearValidate()
+})
+
+async function handleSubmit() {
   const valid = await formRef.value?.validate().catch(() => false)
   if (!valid) return
 
   loading.value = true
   error.value = ''
   try {
-    const result = await login(form)
+    const result = mode.value === 'login'
+      ? await login({ username: form.username, password: form.password })
+      : await register({
+          username: form.username,
+          password: form.password,
+          confirm_password: form.confirm_password,
+          display_name: form.display_name,
+        })
     userStore.setUser(result.user, result.token)
     router.push('/dashboard')
   } catch (e: any) {
-    error.value = e.message || '登录失败，请检查用户名和密码'
+    error.value = e.message || (mode.value === 'login' ? '登录失败，请检查用户名和密码' : '注册失败，请检查输入信息')
   } finally {
     loading.value = false
   }
@@ -120,7 +195,7 @@ async function handleLogin() {
 
 .login-header {
   text-align: center;
-  margin-bottom: 32px;
+  margin-bottom: 24px;
 }
 
 .login-logo {
@@ -151,6 +226,12 @@ async function handleLogin() {
 .login-subtitle {
   font-size: 14px;
   color: var(--text-secondary);
+}
+
+.auth-switch {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 24px;
 }
 
 .login-btn {

@@ -27,5 +27,5 @@ export function sendMessage(conversationId: number, content: string) {
 }
 
 export function complete(data: CompleteRequest) {
-  return request.post<CompleteResponse>('/chat/complete/', data)
+  return request.post<CompleteResponse>('/chat/complete/', data, { timeout: 180000 })
 }
